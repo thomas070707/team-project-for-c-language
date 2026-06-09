@@ -1,3 +1,4 @@
+#pragma execution_character_set("utf-8")
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,9 +7,7 @@
 #include <conio.h>
 
 #define DIGITS      3
-#define BALL_MAX    4
 #define STRIKE_MAX  3
-#define OUT_MAX     3
 #define BASE_COUNT  3
 
 /* ===================== 플레이어 데이터 ===================== */
@@ -71,10 +70,10 @@ void print_rules(void) {
     printf("3. 숫자와 위치가 모두 맞으면 스트라이크(S)입니다.\n");
     printf("4. 숫자는 맞지만 위치가 다르면 볼(B)입니다.\n");
     printf("5. 하나도 맞지 않으면 아웃(OUT)입니다.\n\n");
-    printf("6. 누적 4B  → 내 주자 한 베이스 진루 (3루 주자 있으면 홈인 +1점)\n");
+    printf("6. 누적 1B  → 내 주자 한 베이스 진루 (3루 주자 있으면 홈인 +1점)\n");
     printf("7. 누적 3S  → 상대 다음 턴 스킵 (내가 연속 공격)\n");
-    printf("8. 누적 3OUT→ 상대 베이스 주자 하나 선택 아웃\n");
-    printf("9. 홈런     → 숫자 3개 완전히 맞힘, 베이스 주자 전원 홈인\n");
+    printf("8. 누적 1OUT→ 상대 베이스 주자 하나 선택 아웃\n");
+    printf("9. 홈런     → 숫자 3개 완전히 맞힘, 베이스 주자 전원 홈인(+3점)\n");
     printf("10. 승리    → 홈런 시 게임 종료, 점수 높은 사람 승리\n");
     printf("            (동점이면 먼저 홈런 친 사람 승리)\n\n");
     system("pause");
@@ -227,23 +226,20 @@ void choose_remove_runner(int target_player) {
 
 /* attacker_player: 홈런 친 쪽 (1 또는 2) */
 void apply_homerun(int attacker_player) {
-    int  i, runs = 0;
+    int  i;
     int* bases = (attacker_player == 1) ? p1_bases : p2_bases;
     int* score = (attacker_player == 1) ? &p1_score : &p2_score;
     char* name = (attacker_player == 1) ? p1_name : p2_name;
 
-    printf("\n  홈런! %s가 숫자 3개를 모두 맞췄습니다!\n", name);
+    printf("\n  ★ 홈런! %s가 숫자 3개를 모두 맞췄습니다! (기본 3점 획득) ★\n", name);
+
+    // 베이스에 있던 주자들은 홈런 타구에 모두 홈으로 들어오며 베이스를 비웁니다.
     for (i = 0; i < BASE_COUNT; i++) {
-        if (bases[i]) {
-            runs++;
-            bases[i] = 0;
-        }
+        bases[i] = 0;
     }
-    (*score) += runs;
-    if (runs > 0)
-        printf("  %s의 주자들이 홈인하여 %d점을 얻었습니다!\n", name, runs);
-    else
-        printf("  베이스에 주자가 없어 추가 점수는 없습니다.\n");
+
+    (*score) += 3; // 묻지도 따지지도 않고 3점 추가!
+    printf("  %s의 점수가 3점 추가되었습니다.\n", name);
 }
 
 /* ===================== 메인 함수 ===================== */
@@ -254,7 +250,7 @@ int main(void) {
     int guess[DIGITS];
     int s, b;
 
-    /* 현재 공격자/수비자를 나타내는 정수 (1 또는 2) */
+    /* 현재 공격자/수비자를 나타내는 정수 (플레이어 1 또는 2) */
     int atk, def;
 
     /* 공격자의 각 카운터 포인터 */
@@ -284,15 +280,14 @@ int main(void) {
     /* 이름 입력 */
     printf("=== 야구 숫자 맞추기 변형 게임 ===\n\n");
     printf("플레이어 1 이름: ");
-    scanf("%19s", p1_name);
+    scanf("%10s", p1_name);
     printf("플레이어 2 이름: ");
-    scanf("%19s", p2_name);
+    scanf("%10s", p2_name);
     clear_input_buffer();
     system("cls");
-
     print_rules();
 
-    /* 비밀 숫자 설정 */
+
     printf("[숫자 설정]\n");
     get_secret_answer(1);
     printf("[숫자 설정]\n");
@@ -305,7 +300,7 @@ int main(void) {
         atk = (turn == 0) ? 1 : 2;
         def = (turn == 0) ? 2 : 1;
 
-        /* 공격자/수비자 포인터 연결 */
+
         atk_name = (atk == 1) ? p1_name : p2_name;
         atk_balls = (atk == 1) ? &p1_balls : &p2_balls;
         atk_strikes = (atk == 1) ? &p1_strikes : &p2_strikes;
@@ -313,7 +308,7 @@ int main(void) {
         def_skip = (def == 1) ? &p1_skip_next : &p2_skip_next;
         def_answer = (def == 1) ? p1_answer : p2_answer;
 
-        /* 스킵 처리 */
+
         if ((atk == 1 && p1_skip_next) || (atk == 2 && p2_skip_next)) {
             printf("\n>>> %s의 턴이 스킵됩니다.\n", atk_name);
             if (atk == 1) p1_skip_next = 0;
@@ -331,7 +326,9 @@ int main(void) {
         if (s == 0 && b == 0) printf(" (OUT)");
         printf("\n");
 
-        /* 홈런 판정 */
+        /* ==================== 수정된 판정 처리 구간 ==================== */
+
+                /* 홈런 판정 (3S 적중) */
         if (s == DIGITS) {
             if (first_solver == 0)
                 first_solver = atk;
@@ -340,19 +337,19 @@ int main(void) {
             break;
         }
 
-        /* 볼 누적 처리 */
+        /* 볼 처리: 이제 누적 안 하고 1B당 'b번' 즉시 진루합니다 */
         if (b > 0) {
-            *atk_balls += b;
-            printf("  %s 누적 B: %d/%d\n", atk_name, *atk_balls, BALL_MAX);
-            while (*atk_balls >= BALL_MAX) {
-                *atk_balls -= BALL_MAX;
+            printf("  %s의 %dB 판정! 주자가 %d칸 진루합니다.\n", atk_name, b, b);
+
+            for (int k = 0; k < b; k++) {
                 advance_bases(atk);
             }
         }
 
-        /* 스트라이크 누적 처리 */
+        /* 스트라이크 처리: 스킵 룰은 기존 유지 (3S 누적 시 상대 다음 턴 스킵) */
         if (s > 0) {
             *atk_strikes += s;
+
             printf("  %s 누적 S: %d/%d\n", atk_name, *atk_strikes, STRIKE_MAX);
             while (*atk_strikes >= STRIKE_MAX) {
                 *atk_strikes -= STRIKE_MAX;
@@ -362,18 +359,17 @@ int main(void) {
             }
         }
 
-        /* 아웃 누적 처리 */
+        /* 아웃 처리: 이제 1번만 아웃당해도(s==0 && b==0) 즉시 상대 주자 1명 저격 */
         if (s == 0 && b == 0) {
-            (*atk_outs)++;
-            printf("  %s 누적 OUT: %d/%d\n", atk_name, *atk_outs, OUT_MAX);
-            while (*atk_outs >= OUT_MAX) {
-                *atk_outs -= OUT_MAX;
-                choose_remove_runner(def);
-            }
+            printf("  %s의 OUT 판정! 상대 주자를 하나 제거할 기회입니다.\n", atk_name);
+            choose_remove_runner(def);
         }
+
+        /* ================================================================ */
 
         turn = 1 - turn;
     }
+
 
     /* ===================== 최종 결과 ===================== */
     print_board();
@@ -393,8 +389,6 @@ int main(void) {
             printf("[우승] %s!\n", p1_name);
         else if (first_solver == 2)
             printf("[우승] %s!\n", p2_name);
-        else
-            printf("승부가 나지 않았습니다.\n");
     }
 
     return 0;
